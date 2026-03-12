@@ -1,4 +1,4 @@
-package org.example.salesservice;
+package com.revshop.salesservice;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
