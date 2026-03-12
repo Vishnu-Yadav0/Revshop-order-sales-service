@@ -21,6 +21,9 @@ public class OrderItems {
     @Column(name = "product_id", nullable = false)
     private Long productId;
 
+    @Column(name = "seller_id", nullable = false)
+    private Long sellerId;
+
     @Column(nullable = false)
     private Integer quantity;
 
@@ -30,9 +33,10 @@ public class OrderItems {
     public OrderItems() {
     }
 
-    public OrderItems(Orders order, Long productId, Integer quantity, BigDecimal priceAtPurchase) {
+    public OrderItems(Orders order, Long productId, Long sellerId, Integer quantity, BigDecimal priceAtPurchase) {
         this.order = order;
         this.productId = productId;
+        this.sellerId = sellerId;
         this.quantity = quantity;
         this.priceAtPurchase = priceAtPurchase;
     }
@@ -59,6 +63,14 @@ public class OrderItems {
 
     public void setProductId(Long productId) {
         this.productId = productId;
+    }
+
+    public Long getSellerId() {
+        return sellerId;
+    }
+
+    public void setSellerId(Long sellerId) {
+        this.sellerId = sellerId;
     }
 
     public Integer getQuantity() {

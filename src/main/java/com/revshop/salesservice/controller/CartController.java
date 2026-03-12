@@ -1,5 +1,6 @@
 package com.revshop.salesservice.controller;
 
+import com.revshop.salesservice.dto.ApiResponse;
 import com.revshop.salesservice.dto.CartDTO;
 import com.revshop.salesservice.service.CartService;
 import org.springframework.http.ResponseEntity;
@@ -16,26 +17,25 @@ public class CartController {
     }
 
     @GetMapping("/user/{userId}")
-    public ResponseEntity<CartDTO> getCart(@PathVariable Long userId) {
-        return ResponseEntity.ok(cartService.getCartByUserId(userId));
+    public ResponseEntity<ApiResponse<CartDTO>> getCart(@PathVariable Long userId) {
+        return ResponseEntity.ok(new ApiResponse<CartDTO>("Cart fetched successfully", cartService.getCartByUserId(userId)));
     }
 
     @PostMapping("/user/{userId}/add")
-    public ResponseEntity<Void> addItem(@PathVariable Long userId, @RequestParam Long productId,
-            @RequestParam Integer quantity) {
+    public ResponseEntity<ApiResponse<CartDTO>> addItem(@PathVariable Long userId, @RequestParam Long productId, @RequestParam Integer quantity) {
         cartService.addItemToCart(userId, productId, quantity);
-        return ResponseEntity.ok().build();
+        return ResponseEntity.ok(new ApiResponse<CartDTO>("Item added to cart", cartService.getCartByUserId(userId)));
     }
 
     @DeleteMapping("/user/{userId}/remove/{productId}")
-    public ResponseEntity<Void> removeItem(@PathVariable Long userId, @PathVariable Long productId) {
+    public ResponseEntity<ApiResponse<CartDTO>> removeItem(@PathVariable Long userId, @PathVariable Long productId) {
         cartService.removeItemFromCart(userId, productId);
-        return ResponseEntity.ok().build();
+        return ResponseEntity.ok(new ApiResponse<CartDTO>("Item removed from cart", cartService.getCartByUserId(userId)));
     }
 
     @DeleteMapping("/user/{userId}/clear")
-    public ResponseEntity<Void> clearCart(@PathVariable Long userId) {
+    public ResponseEntity<ApiResponse<Void>> clearCart(@PathVariable Long userId) {
         cartService.clearCart(userId);
-        return ResponseEntity.ok().build();
+        return ResponseEntity.ok(new ApiResponse<Void>("Cart cleared successfully", null));
     }
 }

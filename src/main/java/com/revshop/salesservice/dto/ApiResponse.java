@@ -7,6 +7,11 @@ public class ApiResponse<T> {
     public ApiResponse() {
     }
 
+    public ApiResponse(String message, T data) {
+        this.message = message;
+        this.data = data;
+    }
+
     public String getMessage() {
         return message;
     }
