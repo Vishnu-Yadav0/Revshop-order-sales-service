@@ -1,7 +1,10 @@
 package com.revshop.salesservice.service;
 
 import com.revshop.salesservice.client.CatalogClient;
+import com.revshop.salesservice.client.IdentityClient;
 import com.revshop.salesservice.client.InventoryClient;
+import com.revshop.salesservice.client.ShippingServiceClient;
+import com.revshop.salesservice.client.NotificationServiceClient;
 import com.revshop.salesservice.dto.ApiResponse;
 import com.revshop.salesservice.dto.*;
 import com.revshop.salesservice.exception.ResourceNotFoundException;
@@ -31,13 +34,20 @@ public class OrdersService {
     private final CatalogClient catalogClient;
     private final InventoryClient inventoryClient;
     private final CouponService couponService;
+    private final IdentityClient identityClient;
+    private final ShippingServiceClient shippingServiceClient;
+    private final NotificationServiceClient notificationServiceClient;
 
     public OrdersService(OrdersRepository ordersRepository, CatalogClient catalogClient,
-            InventoryClient inventoryClient, CouponService couponService) {
+            InventoryClient inventoryClient, CouponService couponService, IdentityClient identityClient,
+            ShippingServiceClient shippingServiceClient, NotificationServiceClient notificationServiceClient) {
         this.ordersRepository = ordersRepository;
         this.catalogClient = catalogClient;
         this.inventoryClient = inventoryClient;
         this.couponService = couponService;
+        this.identityClient = identityClient;
+        this.shippingServiceClient = shippingServiceClient;
+        this.notificationServiceClient = notificationServiceClient;
     }
 
     public OrderResponseDTO placeOrder(OrderRequestDTO request) {
@@ -93,6 +103,9 @@ public class OrdersService {
 
         order.setTotalAmount(totalAmount);
         Orders savedOrder = ordersRepository.save(order);
+        
+        // Notify buyer and seller about order placement
+        sendOrderPlacedNotifications(savedOrder);
 
         return convertToResponseDTO(savedOrder);
     }
@@ -112,8 +125,139 @@ public class OrdersService {
     public OrderResponseDTO updateOrderStatus(Long orderId, String status) {
         Orders order = ordersRepository.findById(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found with id: " + orderId));
-        order.setStatus(Orders.OrderStatus.valueOf(status.toUpperCase()));
-        return convertToResponseDTO(ordersRepository.save(order));
+        
+        Orders.OrderStatus oldStatus = order.getStatus();
+        Orders.OrderStatus newStatus = Orders.OrderStatus.valueOf(status.toUpperCase());
+        
+        order.setStatus(newStatus);
+        Orders savedOrder = ordersRepository.save(order);
+        OrderResponseDTO response = convertToResponseDTO(savedOrder);
+        
+        // Send notification and email if status changed
+        if (oldStatus != newStatus) {
+            sendNotifications(savedOrder, newStatus);
+        }
+        
+        return response;
+    }
+
+    private void sendNotifications(Orders order, Orders.OrderStatus status) {
+        try {
+            // Fetch buyer info
+            ApiResponse<UserDTO> userResponse = identityClient.getUserById(order.getUserId());
+            if (userResponse != null && userResponse.getData() != null) {
+                UserDTO user = userResponse.getData();
+                
+                // 1. Create Dashboard Notification
+                Map<String, Object> notifRequest = new HashMap<>();
+                notifRequest.put("userId", order.getUserId());
+                notifRequest.put("title", "Order Status Update: " + status);
+                notifRequest.put("message", "Your order #" + order.getOrderNumber() + " is now " + status);
+                notifRequest.put("type", "ORDER");
+                notifRequest.put("targetId", order.getOrderId().toString());
+                notificationServiceClient.createNotification(notifRequest);
+                
+                // 2. Send Email
+                Map<String, String> emailRequest = new HashMap<>();
+                emailRequest.put("to", user.getEmail());
+                emailRequest.put("subject", "RevShop - Order Status Update #" + order.getOrderNumber());
+                emailRequest.put("body", "Hello " + user.getName() + ",\n\nYour order #" + order.getOrderNumber() + 
+                    " has been updated to: " + status + ".\n\nThank you for shopping with RevShop!");
+                notificationServiceClient.sendEmail(emailRequest);
+            }
+
+            // ADD SELLER NOTIFICATION FOR DELIVERED
+            if (status == Orders.OrderStatus.DELIVERED) {
+                List<Long> sellerIds = order.getOrderItems().stream()
+                        .map(OrderItems::getSellerId)
+                        .distinct()
+                        .toList();
+                
+                for (Long sellerId : sellerIds) {
+                    ApiResponse<UserDTO> sellerResponse = identityClient.getUserById(sellerId);
+                    if (sellerResponse != null && sellerResponse.getData() != null) {
+                        UserDTO seller = sellerResponse.getData();
+                        // 1. Notification
+                        Map<String, Object> sellerNotif = new HashMap<>();
+                        sellerNotif.put("userId", sellerId);
+                        sellerNotif.put("title", "Order Delivered Successfully");
+                        sellerNotif.put("message", "Order #" + order.getOrderNumber() + " containing your product(s) has been delivered to the customer.");
+                        sellerNotif.put("type", "ORDER");
+                        sellerNotif.put("targetId", order.getOrderId().toString());
+                        notificationServiceClient.createNotification(sellerNotif);
+
+                        // 2. Email
+                        Map<String, String> sellerEmail = new HashMap<>();
+                        sellerEmail.put("to", seller.getEmail());
+                        sellerEmail.put("subject", "RevShop - Order Delivered #" + order.getOrderNumber());
+                        sellerEmail.put("body", "Hello " + seller.getName() + ",\n\nOrder #" + order.getOrderNumber() + 
+                            " containing your product(s) has been successfully delivered.\n\nThank you for selling on RevShop!");
+                        notificationServiceClient.sendEmail(sellerEmail);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.error("Failed to send notifications for order {}: {}", order.getOrderId(), e.getMessage());
+        }
+    }
+
+    private void sendOrderPlacedNotifications(Orders order) {
+        try {
+            // Notify Buyer
+            ApiResponse<UserDTO> buyerResponse = identityClient.getUserById(order.getUserId());
+            if (buyerResponse != null && buyerResponse.getData() != null) {
+                UserDTO buyer = buyerResponse.getData();
+                
+                // 1. Create Dashboard Notification
+                Map<String, Object> notifRequest = new HashMap<>();
+                notifRequest.put("userId", order.getUserId());
+                notifRequest.put("title", "Order Placed Successfully");
+                notifRequest.put("message", "Your order #" + order.getOrderNumber() + " has been placed successfully.");
+                notifRequest.put("type", "ORDER");
+                notifRequest.put("targetId", order.getOrderId().toString());
+                notificationServiceClient.createNotification(notifRequest);
+                
+                // 2. Send Email
+                Map<String, String> emailRequest = new HashMap<>();
+                emailRequest.put("to", buyer.getEmail());
+                emailRequest.put("subject", "RevShop - Order Confirmation #" + order.getOrderNumber());
+                emailRequest.put("body", "Hello " + buyer.getName() + ",\n\nThank you for your purchase! Your order #" + order.getOrderNumber() + 
+                    " has been successfully placed.\n\nThank you for shopping with RevShop!");
+                notificationServiceClient.sendEmail(emailRequest);
+            }
+
+            // Notify Sellers
+            List<Long> sellerIds = order.getOrderItems().stream()
+                    .map(OrderItems::getSellerId)
+                    .distinct()
+                    .toList();
+            
+            for (Long sellerId : sellerIds) {
+                ApiResponse<UserDTO> sellerResponse = identityClient.getUserById(sellerId);
+                if (sellerResponse != null && sellerResponse.getData() != null) {
+                    UserDTO seller = sellerResponse.getData();
+                    
+                    // 1. Notification
+                    Map<String, Object> sellerNotif = new HashMap<>();
+                    sellerNotif.put("userId", sellerId);
+                    sellerNotif.put("title", "New Order Received");
+                    sellerNotif.put("message", "You have received a new order #" + order.getOrderNumber() + " for your product(s).");
+                    sellerNotif.put("type", "ORDER");
+                    sellerNotif.put("targetId", order.getOrderId().toString());
+                    notificationServiceClient.createNotification(sellerNotif);
+
+                    // 2. Email
+                    Map<String, String> sellerEmail = new HashMap<>();
+                    sellerEmail.put("to", seller.getEmail());
+                    sellerEmail.put("subject", "RevShop - New Order Received #" + order.getOrderNumber());
+                    sellerEmail.put("body", "Hello " + seller.getName() + ",\n\nGreat news! You have received a new order #" + order.getOrderNumber() + 
+                        " for your product(s).\n\nPlease check your dashboard for details.\n\nThank you for selling on RevShop!");
+                    notificationServiceClient.sendEmail(sellerEmail);
+                }
+            }
+        } catch (Exception e) {
+            log.error("Failed to send order placed notifications for order {}: {}", order.getOrderId(), e.getMessage());
+        }
     }
 
     public OrderResponseDTO cancelOrder(Long orderId, Long userId) {
@@ -178,12 +322,21 @@ public class OrdersService {
     }
 
     public List<Map<String, Object>> getOrderTracking(Long orderId) {
-        // Placeholder linking to monolith concept. 
-        // In microservices, this might call shipping-service.
+        try {
+            ApiResponse<List<Map<String, Object>>> response = shippingServiceClient.getTrackingByOrderId(orderId);
+            if (response != null && response.getData() != null && !response.getData().isEmpty()) {
+                return response.getData();
+            }
+        } catch (Exception e) {
+            log.warn("Failed to fetch tracking details from shipping service for order: {}", orderId);
+        }
+        
+        // Fallback to initial order placed status if no tracking data yet
         List<Map<String, Object>> tracking = new ArrayList<>();
         Map<String, Object> step = new HashMap<>();
-        step.put("status", "Order Placed");
-        step.put("timestamp", LocalDateTime.now());
+        step.put("status", "ORDER PLACED");
+        step.put("createdAt", LocalDateTime.now());
+        step.put("description", "Order has been placed successfully.");
         tracking.add(step);
         return tracking;
     }
@@ -197,6 +350,41 @@ public class OrdersService {
         dto.setStatus(order.getStatus().name());
         dto.setOrderDate(order.getOrderDate());
         dto.setPaymentMethod(order.getPaymentMethod());
+
+        // Fetch User info for shipper dashboard (name, phone)
+        try {
+            ApiResponse<UserDTO> userResponse = identityClient.getUserById(order.getUserId());
+            if (userResponse != null && userResponse.getData() != null) {
+                UserDTO u = userResponse.getData();
+                dto.setCustomerName(u.getName());
+                dto.setCustomerPhone(u.getPhone());
+                dto.setBuyerName(u.getName()); // For seller dashboard
+            }
+        } catch (Exception e) {
+            log.warn("Identity service error for order mapping: {}", e.getMessage());
+        }
+
+        // Fetch Shipper info
+        try {
+            ApiResponse<ShipperDTO> shipperResponse = shippingServiceClient.getShipperByOrder(order.getOrderId());
+            if (shipperResponse != null && shipperResponse.getData() != null) {
+                dto.setShipperName(shipperResponse.getData().getName());
+            }
+        } catch (Exception e) {
+            log.warn("Shipping service error for order mapping: {}", e.getMessage());
+        }
+
+        // Fetch Address info for shipper dashboard
+        if (order.getShippingAddressId() != null) {
+            try {
+                ApiResponse<AddressDTO> addrResponse = identityClient.getAddressById(order.getShippingAddressId());
+                if (addrResponse != null && addrResponse.getData() != null) {
+                    dto.setShippingAddress(addrResponse.getData());
+                }
+            } catch (Exception e) {
+                log.warn("Address service error for order mapping: {}", e.getMessage());
+            }
+        }
 
         List<OrderItemResponseDTO> itemDTOs = order.getOrderItems().stream().map(item -> {
             OrderItemResponseDTO itemDTO = new OrderItemResponseDTO();

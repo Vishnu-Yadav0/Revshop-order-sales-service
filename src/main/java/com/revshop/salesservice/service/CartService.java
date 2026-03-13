@@ -7,7 +7,6 @@ import com.revshop.salesservice.dto.CartItemDTO;
 import com.revshop.salesservice.dto.ProductDTO;
 import com.revshop.salesservice.model.Cart;
 import com.revshop.salesservice.model.CartItem;
-import com.revshop.salesservice.repository.CartItemRepository;
 import com.revshop.salesservice.repository.CartRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,25 +21,32 @@ import java.util.stream.Collectors;
 public class CartService {
 
     private final CartRepository cartRepository;
-    private final CartItemRepository cartItemRepository;
     private final CatalogClient catalogClient;
 
-    public CartService(CartRepository cartRepository, CartItemRepository cartItemRepository,
-            CatalogClient catalogClient) {
+    public CartService(CartRepository cartRepository, CatalogClient catalogClient) {
         this.cartRepository = cartRepository;
-        this.cartItemRepository = cartItemRepository;
         this.catalogClient = catalogClient;
     }
 
+    private Cart getOrCreateCart(Long userId) {
+        List<Cart> carts = cartRepository.findByUserId(userId);
+        if (carts.isEmpty()) {
+            return cartRepository.save(new Cart(userId));
+        }
+        // If multiple carts exist (legacy issue), return the first one
+        return carts.get(0);
+    }
+
     public CartDTO getCartByUserId(Long userId) {
-        Cart cart = cartRepository.findByUserId(userId)
-                .orElseGet(() -> cartRepository.save(new Cart(userId)));
-        return convertToDTO(cart);
+        return convertToDTO(getOrCreateCart(userId));
     }
 
     public void addItemToCart(Long userId, Long productId, Integer quantity) {
-        Cart cart = cartRepository.findByUserId(userId)
-                .orElseGet(() -> cartRepository.save(new Cart(userId)));
+        Cart cart = getOrCreateCart(userId);
+
+        if (cart.getItems() == null) {
+            cart.setItems(new java.util.ArrayList<>());
+        }
 
         Optional<CartItem> existingItem = cart.getItems().stream()
                 .filter(item -> item.getProductId().equals(productId))
@@ -56,18 +62,27 @@ public class CartService {
         cartRepository.save(cart);
     }
 
+    public void updateItemQuantity(Long userId, Long productId, Integer quantity) {
+        Cart cart = getOrCreateCart(userId);
+        cart.getItems().stream()
+                .filter(item -> item.getProductId().equals(productId))
+                .findFirst()
+                .ifPresent(item -> {
+                    item.setQuantity(quantity);
+                    cartRepository.save(cart);
+                });
+    }
+
     public void removeItemFromCart(Long userId, Long productId) {
-        cartRepository.findByUserId(userId).ifPresent(cart -> {
-            cart.getItems().removeIf(item -> item.getProductId().equals(productId));
-            cartRepository.save(cart);
-        });
+        Cart cart = getOrCreateCart(userId);
+        cart.getItems().removeIf(item -> item.getProductId().equals(productId));
+        cartRepository.save(cart);
     }
 
     public void clearCart(Long userId) {
-        cartRepository.findByUserId(userId).ifPresent(cart -> {
-            cart.getItems().clear();
-            cartRepository.save(cart);
-        });
+        Cart cart = getOrCreateCart(userId);
+        cart.getItems().clear();
+        cartRepository.save(cart);
     }
 
     private CartDTO convertToDTO(Cart cart) {

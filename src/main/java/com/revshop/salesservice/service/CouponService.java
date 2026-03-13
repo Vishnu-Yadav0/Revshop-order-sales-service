@@ -64,6 +64,12 @@ public class CouponService {
         });
     }
 
+    public java.util.List<Coupon> getActiveCoupons() {
+        return couponRepository.findAll().stream()
+                .filter(c -> c.getIsActive() && (c.getExpiryDate() == null || c.getExpiryDate().isAfter(LocalDateTime.now())))
+                .collect(java.util.stream.Collectors.toList());
+    }
+
     public Coupon createCoupon(Coupon coupon) {
         coupon.setCode(coupon.getCode().toUpperCase().trim());
         return couponRepository.save(coupon);

@@ -11,4 +11,7 @@ public interface IdentityClient {
 
     @GetMapping("/api/users/{userId}")
     ApiResponse<UserDTO> getUserById(@PathVariable("userId") Long userId);
+
+    @GetMapping("/api/addresses/{addressId}")
+    ApiResponse<com.revshop.salesservice.dto.AddressDTO> getAddressById(@PathVariable("addressId") Long addressId);
 }

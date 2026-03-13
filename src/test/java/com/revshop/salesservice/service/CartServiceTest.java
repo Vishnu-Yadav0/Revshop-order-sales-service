@@ -12,12 +12,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-
-import java.util.Optional;
 import java.util.ArrayList;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -47,7 +44,7 @@ public class CartServiceTest {
 
     @Test
     void getCartByUserId_ExistingCart_Success() {
-        when(cartRepository.findByUserId(userId)).thenReturn(Optional.of(cart));
+        when(cartRepository.findByUserId(userId)).thenReturn(java.util.Collections.singletonList(cart));
 
         CartDTO result = cartService.getCartByUserId(userId);
 
@@ -58,7 +55,7 @@ public class CartServiceTest {
 
     @Test
     void addItemToCart_NewItem_Success() {
-        when(cartRepository.findByUserId(userId)).thenReturn(Optional.of(cart));
+        when(cartRepository.findByUserId(userId)).thenReturn(java.util.Collections.singletonList(cart));
 
         cartService.addItemToCart(userId, 101L, 2);
 
@@ -71,7 +68,7 @@ public class CartServiceTest {
     void removeItemFromCart_Success() {
         CartItem item = new CartItem(cart, 101L, 2);
         cart.getItems().add(item);
-        when(cartRepository.findByUserId(userId)).thenReturn(Optional.of(cart));
+        when(cartRepository.findByUserId(userId)).thenReturn(java.util.Collections.singletonList(cart));
 
         cartService.removeItemFromCart(userId, 101L);
 
@@ -82,7 +79,7 @@ public class CartServiceTest {
     @Test
     void clearCart_Success() {
         cart.getItems().add(new CartItem(cart, 101L, 2));
-        when(cartRepository.findByUserId(userId)).thenReturn(Optional.of(cart));
+        when(cartRepository.findByUserId(userId)).thenReturn(java.util.Collections.singletonList(cart));
 
         cartService.clearCart(userId);
 

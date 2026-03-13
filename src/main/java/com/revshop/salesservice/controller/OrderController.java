@@ -51,7 +51,8 @@ public class OrderController {
     @PutMapping("/{orderId}/cancel")
     public ResponseEntity<ApiResponse<OrderResponseDTO>> cancelOrder(
             @PathVariable Long orderId,
-            @RequestParam Long userId) {
+            @RequestBody Map<String, Object> payload) {
+        Long userId = Long.valueOf(payload.get("userId").toString());
         log.info("PUT /api/orders/{}/cancel", orderId);
         return ResponseEntity.ok(new ApiResponse<OrderResponseDTO>("Order cancelled successfully", ordersService.cancelOrder(orderId, userId)));
     }
@@ -71,8 +72,9 @@ public class OrderController {
     @PutMapping("/{orderId}/return")
     public ResponseEntity<ApiResponse<OrderResponseDTO>> requestReturn(
             @PathVariable Long orderId,
-            @RequestParam Long userId,
-            @RequestParam String reason) {
+            @RequestBody Map<String, Object> payload) {
+        Long userId = Long.valueOf(payload.get("userId").toString());
+        String reason = (String) payload.get("reason");
         log.info("PUT /api/orders/{}/return", orderId);
         return ResponseEntity.ok(new ApiResponse<OrderResponseDTO>("Return requested", ordersService.requestReturn(orderId, userId, reason)));
     }

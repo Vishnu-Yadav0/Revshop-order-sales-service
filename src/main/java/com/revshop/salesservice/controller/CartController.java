@@ -2,6 +2,7 @@ package com.revshop.salesservice.controller;
 
 import com.revshop.salesservice.dto.ApiResponse;
 import com.revshop.salesservice.dto.CartDTO;
+import com.revshop.salesservice.dto.OrderItemRequestDTO;
 import com.revshop.salesservice.service.CartService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -22,8 +23,8 @@ public class CartController {
     }
 
     @PostMapping("/user/{userId}/add")
-    public ResponseEntity<ApiResponse<CartDTO>> addItem(@PathVariable Long userId, @RequestParam Long productId, @RequestParam Integer quantity) {
-        cartService.addItemToCart(userId, productId, quantity);
+    public ResponseEntity<ApiResponse<CartDTO>> addItem(@PathVariable Long userId, @RequestBody OrderItemRequestDTO request) {
+        cartService.addItemToCart(userId, request.getProductId(), request.getQuantity());
         return ResponseEntity.ok(new ApiResponse<CartDTO>("Item added to cart", cartService.getCartByUserId(userId)));
     }
 
@@ -31,6 +32,12 @@ public class CartController {
     public ResponseEntity<ApiResponse<CartDTO>> removeItem(@PathVariable Long userId, @PathVariable Long productId) {
         cartService.removeItemFromCart(userId, productId);
         return ResponseEntity.ok(new ApiResponse<CartDTO>("Item removed from cart", cartService.getCartByUserId(userId)));
+    }
+
+    @PutMapping("/user/{userId}/update")
+    public ResponseEntity<ApiResponse<CartDTO>> updateQuantity(@PathVariable Long userId, @RequestBody OrderItemRequestDTO request) {
+        cartService.updateItemQuantity(userId, request.getProductId(), request.getQuantity());
+        return ResponseEntity.ok(new ApiResponse<CartDTO>("Quantity updated", cartService.getCartByUserId(userId)));
     }
 
     @DeleteMapping("/user/{userId}/clear")
