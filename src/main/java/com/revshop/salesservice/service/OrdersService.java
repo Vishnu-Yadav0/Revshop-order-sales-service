@@ -13,6 +13,7 @@ import com.revshop.salesservice.model.Orders;
 import com.revshop.salesservice.repository.OrdersRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -141,7 +142,8 @@ public class OrdersService {
         return response;
     }
 
-    private void sendNotifications(Orders order, Orders.OrderStatus status) {
+    @Async
+    public void sendNotifications(Orders order, Orders.OrderStatus status) {
         try {
             // Fetch buyer info
             ApiResponse<UserDTO> userResponse = identityClient.getUserById(order.getUserId());
@@ -201,7 +203,8 @@ public class OrdersService {
         }
     }
 
-    private void sendOrderPlacedNotifications(Orders order) {
+    @Async
+    public void sendOrderPlacedNotifications(Orders order) {
         try {
             // Notify Buyer
             ApiResponse<UserDTO> buyerResponse = identityClient.getUserById(order.getUserId());

@@ -43,8 +43,11 @@ public class OrderController {
     }
 
     @PutMapping("/{orderId}/status")
-    public ResponseEntity<ApiResponse<OrderResponseDTO>> updateStatus(@PathVariable Long orderId, @RequestParam String status) {
-        log.info("PUT /api/orders/{}/status", orderId);
+    public ResponseEntity<ApiResponse<OrderResponseDTO>> updateStatus(
+            @PathVariable Long orderId,
+            @RequestBody Map<String, Object> payload) {
+        String status = (String) payload.get("status");
+        log.info("PUT /api/orders/{}/status -> {}", orderId, status);
         return ResponseEntity.ok(new ApiResponse<OrderResponseDTO>("Status updated successfully", ordersService.updateOrderStatus(orderId, status)));
     }
 
