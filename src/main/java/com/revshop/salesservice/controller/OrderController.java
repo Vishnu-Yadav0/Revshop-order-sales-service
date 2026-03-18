@@ -87,4 +87,13 @@ public class OrderController {
         log.info("GET /api/orders/{}/tracking", orderId);
         return ResponseEntity.ok(new ApiResponse<List<Map<String, Object>>>("Tracking details fetched", ordersService.getOrderTracking(orderId)));
     }
+
+    @GetMapping("/check-purchase")
+    public ResponseEntity<ApiResponse<Boolean>> checkPurchase(
+            @RequestParam Long userId,
+            @RequestParam Long productId) {
+        log.info("GET /api/orders/check-purchase?userId={}&productId={}", userId, productId);
+        boolean purchased = ordersService.hasUserPurchasedProduct(userId, productId);
+        return ResponseEntity.ok(new ApiResponse<Boolean>("Purchase status fetched", purchased));
+    }
 }

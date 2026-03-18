@@ -5,6 +5,7 @@ import com.revshop.salesservice.client.IdentityClient;
 import com.revshop.salesservice.client.InventoryClient;
 import com.revshop.salesservice.client.ShippingServiceClient;
 import com.revshop.salesservice.client.NotificationServiceClient;
+import com.revshop.salesservice.client.PaymentClient;
 import com.revshop.salesservice.dto.ApiResponse;
 import com.revshop.salesservice.dto.*;
 import com.revshop.salesservice.exception.ResourceNotFoundException;
@@ -38,10 +39,12 @@ public class OrdersService {
     private final IdentityClient identityClient;
     private final ShippingServiceClient shippingServiceClient;
     private final NotificationServiceClient notificationServiceClient;
+    private final PaymentClient paymentClient;
 
     public OrdersService(OrdersRepository ordersRepository, CatalogClient catalogClient,
             InventoryClient inventoryClient, CouponService couponService, IdentityClient identityClient,
-            ShippingServiceClient shippingServiceClient, NotificationServiceClient notificationServiceClient) {
+            ShippingServiceClient shippingServiceClient, NotificationServiceClient notificationServiceClient,
+            PaymentClient paymentClient) {
         this.ordersRepository = ordersRepository;
         this.catalogClient = catalogClient;
         this.inventoryClient = inventoryClient;
@@ -49,6 +52,7 @@ public class OrdersService {
         this.identityClient = identityClient;
         this.shippingServiceClient = shippingServiceClient;
         this.notificationServiceClient = notificationServiceClient;
+        this.paymentClient = paymentClient;
     }
 
     public OrderResponseDTO placeOrder(OrderRequestDTO request) {
@@ -103,6 +107,28 @@ public class OrdersService {
         }
 
         order.setTotalAmount(totalAmount);
+
+        // Handle Wallet Payment
+        if ("WALLET".equalsIgnoreCase(request.getPaymentMethod())) {
+            log.info("Deducting from wallet for user {} amount {}", order.getUserId(), totalAmount);
+            Map<String, Object> deductRequest = new HashMap<>();
+            deductRequest.put("amount", totalAmount);
+            deductRequest.put("description", "Order Payment #" + order.getOrderNumber());
+            deductRequest.put("referenceId", order.getOrderNumber());
+            
+            try {
+                ApiResponse<Boolean> response = paymentClient.deductFromWallet(order.getUserId(), deductRequest);
+                if (response == null || response.getData() == null || !response.getData()) {
+                    throw new RuntimeException("Wallet deduction failed or insufficient balance");
+                }
+                // If wallet payment succeeds, set status to PROCESSING
+                order.setStatus(Orders.OrderStatus.PROCESSING);
+            } catch (Exception e) {
+                log.error("Wallet deduction error: {}", e.getMessage());
+                throw new RuntimeException("Wallet payment failed: " + e.getMessage());
+            }
+        }
+
         Orders savedOrder = ordersRepository.save(order);
         
         // Notify buyer and seller about order placement
@@ -339,9 +365,15 @@ public class OrdersService {
         Map<String, Object> step = new HashMap<>();
         step.put("status", "ORDER PLACED");
         step.put("createdAt", LocalDateTime.now());
+        step.put("updatedAt", LocalDateTime.now());
         step.put("description", "Order has been placed successfully.");
         tracking.add(step);
         return tracking;
+    }
+
+    public boolean hasUserPurchasedProduct(Long userId, Long productId) {
+        return ordersRepository.existsByUserIdAndOrderItems_ProductIdAndStatusIn(
+                userId, productId, List.of(Orders.OrderStatus.DELIVERED, Orders.OrderStatus.SHIPPED, Orders.OrderStatus.OUT_FOR_DELIVERY));
     }
 
     private OrderResponseDTO convertToResponseDTO(Orders order) {
